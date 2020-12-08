@@ -1,0 +1,3 @@
+—ñ–¼Ì	Name	Type
+	Name	%String
+	Zip	%String

@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Export generator="Cache" version="9" zv="Cache for Windows NT (Intel/P4) 5.0.21 (Build 6408U)" ts="2006-03-23 14:45:14">
+<Class name="ClassDef.Utility">
+<ProcedureBlock>1</ProcedureBlock>
+<TimeChanged>60347,53100.92638</TimeChanged>
+<TimeCreated>60347,53075.184699</TimeCreated>
+<ClassDefinitionError>0</ClassDefinitionError>
+
+<Method name="CreatePro">
+<ClassMethod>1</ClassMethod>
+<FormalSpec>CName:%String,InFile:%String,Delimi:%String</FormalSpec>
+<ReturnType>%Status</ReturnType>
+<Implementation><![CDATA[
+	//---------------------------------------------------------
+	//[内容]　クラス辞書を使ったクラス定義作成方法サンプル(プロパティ)
+	//[引数]
+	//	CName→クラス名
+	//	InFile→読込みファイル
+	//	Delimit→デリミタ（デフォルトはタブ＝$Char(9)）
+	//[戻り値]
+	//	0：NG(画面にエラーを表示）1:OK
+	//	
+	//[読込みファイル]
+	//	列名をタブ(デフォルト)で区切り1行目をヘッダとしています。
+	//	2行目以降は実際に作成したプロパティの項目を1行ずつ記述しています。
+	//	（ヘッダ以降の行では見栄えのため先頭に空タブを入れています）
+	//	例)
+	//	列名称	Name	Type
+	//	<Tab>	Name	%String
+	//	<Tab>	Email	%String
+	//---------------------------------------------------------
+	//引数チェック
+	If $Get(CName)="" Write "クラス名を指定してください",! Quit 0
+	If $Get(InFile)="" Write "読込みファイルを指定してください",! Quit 0
+	If $Get(Delimi)="" Set Delimi=$Char(9)
+
+	//作成するクラスがあれば削除
+	do ##Class(%Dictionary.ClassDefinition).%DeleteId(CName)
+	
+	Set class=##Class(%Dictionary.ClassDefinition).%New(CName)
+	Set class.ClassType="persistent" 		// 永続オブジェクト作成の指定
+	Set class.Super="%Library.Persistent"  // 　〃
+	
+	//ファイル読込み
+	If '##Class(%File).Exists(InFile) Write "指定のファイルが存在しません",! Quit 0
+
+	// ファイル操作ができるクラスのインスタンスを作る
+	Set fs=##Class(%Library.FileCharacterStream).%New()
+
+	// 対象のファイルをプロパティにセットする
+	Set fs.Filename=InFile
+
+	// AtEndプロパティはデータ最後を検出すると真(1)がセットされます。
+	While 'fs.AtEnd{
+		// 1行ずつ読み込み
+		Set reco=fs.ReadLine()
+		// 読み飛ばし行（ヘッダ）
+		If reco["列名称" { 
+			//　列名称と記載があればヘッダ
+			Set reco=fs.ReadLine() 
+		}
+		W "読込レコード... ",reco,!
+		
+		// タブで区切られた分だけループします
+		For i=1:1:$Length(reco,Delimi) {
+			Set column=$Piece(reco,Delimi,i)
+			If column="" Set start=i Continue
+			If $Get(start)'=""{
+			 // プロパティ用インスタンスの作成
+			 Set pro=##class(%Dictionary.PropertyDefinition).%New(class_":"_column)
+			}
+			// テンポラリグローバル変数に値を格納します
+			// ヘッダ以降先頭に見栄えのために空タブを入れています
+			Set ^CacheTempPData(i-start)=$Piece(reco,Delimi,i)
+		}
+		// プロパティセット
+		Set pro.Name=$Get(^CacheTempPData(1))
+		Set pro.Type=$Get(^CacheTempPData(2))
+		Set sts=class.Properties.Insert(pro)		
+		If $SYSTEM.Status.IsError(sts){
+			Write !,"プロパティの割り当て失敗",!
+			Do $SYSTEM.OBJ.DisplayError(sts)
+		}
+		Kill ^CacheTempPData,pro,start
+
+	}
+	Set sts=class.%Save()
+	If $SYSTEM.Status.IsError(sts){
+		Write !,"クラス定義セーブ失敗",!
+		Do $SYSTEM.OBJ.DisplayError(sts)
+		Quit 0
+	}
+	// クラスのコンパイル
+	Do $SYSTEM.OBJ.Compile(CName)
+	
+	Write "成功！"
+	Quit 1
+]]></Implementation>
+</Method>
+
+<Method name="CreateMethod">
+<ClassMethod>1</ClassMethod>
+<FormalSpec>CName:%String,InFile:%String</FormalSpec>
+<ReturnType>%Status</ReturnType>
+<Implementation><![CDATA[
+	//---------------------------------------------------------
+	//[内容]　クラス辞書を使ったメソッドの定義
+	//[引数]
+	//	CName→クラス名
+	//	InFile→読込みファイル
+	//	Delimit→デリミタ（デフォルトはタブ＝$Char(9)）
+	//[戻り値]
+	//	0：NG(画面にエラーを表示）1:OK
+	//	
+	//[読込みファイルの形式]
+	//		項目<Tab>値
+	//		\
+	//			↑
+	//　メソッドとメソッドとの区切りに「\」を使用します。
+	//	（複数メソッドを定義する場合は1つの定義の最後の行に付けてください。）
+	//	メソッド内コードは（Implementation）複数行に渡る場合もあるため
+	//	項目：Codeから始まる行以降は、先頭にタブを挿入して続きのコードを書いています。
+	//	なお、コードは独自スクリプト記述言語である「Cache ObjectScript」を使用しています。
+	//
+	//---------------------------------------------------------
+	//引数チェック
+	If $Get(CName)="" Write "クラス名を指定してください",! Quit 0
+	If $Get(InFile)="" Write "読込みファイルを指定してください",! Quit 0
+	If $Get(Delimi)="" Set Delimi=$Char(9)
+
+
+	// クラスが存在しなければ新規作成しながら定義
+	Set class=##Class(%Dictionary.ClassDefinition).%OpenId(CName)
+	
+	If class="" {
+		Set class=##Class(%Dictionary.ClassDefinition).%New(CName)
+		Set class.ClassType="persistent" 		// 永続オブジェクト作成の指定
+		Set class.Super="%Library.Persistent"  // 　〃
+	}
+	Do class.Methods.Clear()  // 既存のメソッド定義を削除します。
+
+	//ファイル読込み
+	If '##Class(%File).Exists(InFile) Write "指定のファイルが存在しません",! Quit 0
+
+	// ファイル操作ができるクラスのインスタンスを作る
+	Set fs=##Class(%Library.FileCharacterStream).%New()
+
+	// 対象のファイルをプロパティにセットする
+	Set fs.Filename=InFile
+
+	Set cn=1
+	// AtEndプロパティはデータ最後を検出すると真(1)がセットされます。
+	While 'fs.AtEnd{
+		// 1行ずつ読み込み
+		Set reco=fs.ReadLine()
+		Write "読込レコード... ",reco,!
+
+		Set data=$Piece(reco,Delimi,1)
+		Set val=$Piece(reco,Delimi,2)
+
+		If data="\" { 
+			Write "メソッド：",$Get(^CacheTempMethod(cn,"Name")),!
+			Set method(cn).Name=$Get(^CacheTempMethod(cn,"Name"))
+			Set method(cn).ReturnType=$Get(^CacheTempMethod(cn,"ReturnType"))    // 戻り値
+			Set method(cn).FormalSpec=$Get(^CacheTempMethod(cn,"FormalSpec"))    // 引数
+			Set method(cn).CodeMode="code"
+			Set method(cn).ClassMethod=+$Get(^CacheTempMethod(cn,"ClassMethod"))
+
+			// Imprementationはキャラクタストリーム
+			Set num=""
+			// メソッドコード記述（改行は $C(13,10)）
+			For {
+				Set num=$Order(^CacheTempMethod(cn,"Code",num))
+				If num="" Quit
+				Do method(cn).Implementation.Write($Get(^CacheTempMethod(cn,"Code",num)))
+			}
+			// クラスへの割り当て
+			Set sts=class.Methods.Insert(method(cn))
+			Set cn=cn+1  //
+			Continue
+		}
+		If data="Name"{
+			Set method(cn)=##class(%Dictionary.MethodDefinition).%New(class_":"_val)
+		}
+		If (data="")&($Get(val)'="") {
+			Set counter=$Order(^CacheTempMethod(cn,"Code",""),-1)
+			Set ^CacheTempMethod(cn,"Code",counter+1)=$Char(9)_val_$Char(13,10)			
+			Continue
+		}
+		If data="Code" { 
+			Set ^CacheTempMethod(cn,"Code",1)=$Char(9)_val_$Char(13,10)
+			Continue
+		}
+		Set ^CacheTempMethod(cn,data)=val
+	}
+
+	Set sts=class.%Save()
+
+	If $SYSTEM.Status.IsError(sts){
+		Write !,"クラス定義セーブ失敗",!
+		Do $SYSTEM.OBJ.DisplayError(sts)
+		Write !
+	}
+
+	//クラスのコンパイル
+	Do $SYSTEM.OBJ.Compile(CName)
+	
+	Kill ^CacheTempMethod
+	Write "終了！",!
+	Quit 1
+]]></Implementation>
+</Method>
+</Class>
+<Checksum value="91360357"/>
+</Export>

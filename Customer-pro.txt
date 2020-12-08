@@ -1,0 +1,5 @@
+—ñ–¼Ì	Name	Type
+	Name	%String
+	Email	%String
+	ContactCount	%Integer
+	Company	Company

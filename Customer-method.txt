@@ -1,0 +1,10 @@
+Name	UpdateContactCount
+Code	Set ..ContactCount=..ContactCount+1
+	Quit
+\
+Name	Calc1
+Code	Quit x+y
+ClassMethod	1
+FormalSpec	x:%Integer,y:%Integer
+ReturnType	%Integer
+\
